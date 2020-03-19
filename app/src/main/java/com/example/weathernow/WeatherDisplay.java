@@ -1,16 +1,23 @@
 package com.example.weathernow;
 
+import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
 
 import android.content.Intent;
 import android.content.SharedPreferences;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
+import android.os.Build;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.View;
 import android.widget.Button;
+import android.widget.ImageView;
 import android.widget.TextView;
 
+import com.example.weathernow.model.City;
+import com.example.weathernow.model.MainInfo;
 import com.example.weathernow.model.WeatherResponse;
 import com.google.gson.Gson;
 
@@ -20,35 +27,30 @@ import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+import java.util.Objects;
 
 
 public class WeatherDisplay extends AppCompatActivity {
 
     private TextView textViewCity,textViewStatus,textViewTemp,textViewDay;
+    private ImageView imgIcon;
     private Button btnMenu;
     public int position;
-    private String data;
+    private WeatherResponse weatherResponse;
+    private Bitmap bmp;
 
+    @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_weather_display);
         mapping();
-        Intent intent = getIntent();
-        position = intent.getIntExtra("position",-1);
+        position = MainActivity.sharedPreferences.getInt("position",-1);
+        textViewCity.setText(MainActivity.sharedPreferences.getString("city",""));
         new GetWeatherData().execute("http://api.openweathermap.org/data/2.5/weather?id="+MainActivity.arrCity.get(position).getId()+"&appid=044c41605d89bfffcc59a2a62e878c60");
-//        double tempConvert = Double.parseDouble(MainActivity.sharedPreferences.getString("temp",""));
-//        tempConvert = tempConvert - 273.15;
-//        String day = MainActivity.sharedPreferences.getString("day","");
-//        long longDay = Long.parseLong(day) * 1000;
-//        Date date = new Date(longDay);
-//        String city = "City: " + MainActivity.sharedPreferences.getString("city","");
-//        String temp = "Temp: " + tempConvert;
-//        String status = "Status: " + MainActivity.sharedPreferences.getString("status","");
-//        textViewCity.setText(city);
-//        textViewTemp.setText(temp);
-//        textViewStatus.setText(status);
-//        textViewDay.setText(SimpleDateFormat.getDateInstance().format(date));
+
     }
 
 
@@ -64,10 +66,7 @@ public class WeatherDisplay extends AppCompatActivity {
             @Override
             public void onClick(View v) {
                 SharedPreferences.Editor editor = MainActivity.sharedPreferences.edit();
-                editor.putString("id","");
-                editor.putString("city","");
-                editor.putString("temp","");
-                editor.putString("status","");
+                editor.putString("screen","0");
                 editor.apply();
                 Intent intent = new Intent(WeatherDisplay.this,MainActivity.class);
                 startActivity(intent);
@@ -81,9 +80,10 @@ public class WeatherDisplay extends AppCompatActivity {
         textViewTemp = findViewById(R.id.textView_Display_Temp);
         btnMenu = findViewById(R.id.btn_Display_menu);
         textViewDay = findViewById(R.id.textView_Display_Day);
+        imgIcon = findViewById(R.id.imgView_Display_icon);
     }
 
-    static class GetWeatherData extends AsyncTask<String,String,String>{
+    class GetWeatherData extends AsyncTask<String,Void,String>{
 
         @Override
         protected void onPreExecute() {
@@ -92,26 +92,36 @@ public class WeatherDisplay extends AppCompatActivity {
 
         @Override
         protected String doInBackground(String... url) {
-            Log.d("WeatherDisplay",getWeatherData(url[0]));
             return getWeatherData(url[0]);
         }
 
         @Override
         protected void onPostExecute(String result) {
             super.onPostExecute(result);
-            Gson gson = new Gson();
-            WeatherResponse weatherResponse = gson.fromJson(result,WeatherResponse.class);
-
+            textViewStatus.setText(weatherResponse.getWeather().get(0).getMain());
+            double tempConvert = Double.parseDouble(weatherResponse.getMain().getTemp());
+            tempConvert = tempConvert - 273.15;
+            String day = weatherResponse.getDt();
+            long longDay = Long.parseLong(day) * 1000;
+            Date date = new Date(longDay);
+            textViewDay.setText(SimpleDateFormat.getTimeInstance().format(date));
+            textViewTemp.setText(String.valueOf(tempConvert));
+            imgIcon.setImageBitmap(bmp);
         }
     }
 
-    private static String getWeatherData(String url){
+    private String getWeatherData(String url){
         try {
             URL urlJSON = new URL(url);
             HttpURLConnection urlConnection = (HttpURLConnection) urlJSON.openConnection();
             urlConnection.setRequestMethod("GET");
             urlConnection.connect();
             BufferedReader inputStream = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+            Gson gson = new Gson();
+            weatherResponse = gson.fromJson(inputStream.readLine(),WeatherResponse.class);
+            String img = "http://openweathermap.org/img/wn/"+weatherResponse.getWeather().get(0).getIcon()+"@2x.png";
+            URL url1 = new URL(img);
+            bmp = BitmapFactory.decodeStream(url1.openConnection().getInputStream());
             urlConnection.disconnect();
             return inputStream.readLine();
         } catch (MalformedURLException e) {

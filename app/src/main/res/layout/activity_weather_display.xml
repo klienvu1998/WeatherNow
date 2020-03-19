@@ -40,6 +40,11 @@
         android:text="Day"
         android:gravity="center"
         android:id="@+id/textView_Display_Day"></TextView>
+    <ImageView
+        android:layout_width="100dp"
+        android:layout_height="100dp"
+        android:layout_gravity="center"
+        android:id="@+id/imgView_Display_icon"></ImageView>
     <Button
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
