@@ -2,7 +2,6 @@ package com.example.weathernow;
 
 import androidx.annotation.RequiresApi;
 import androidx.appcompat.app.AppCompatActivity;
-
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.graphics.Bitmap;
@@ -10,31 +9,34 @@ import android.graphics.BitmapFactory;
 import android.os.AsyncTask;
 import android.os.Build;
 import android.os.Bundle;
+import android.os.Message;
 import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.TextView;
+import com.example.weathernow.handler.GetDataUrlHandler;
 import com.example.weathernow.model.WeatherResponse;
 import com.google.gson.Gson;
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.InputStreamReader;
+import java.lang.ref.WeakReference;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.text.SimpleDateFormat;
-import java.util.Date;
 
 
 public class WeatherDisplay extends AppCompatActivity {
+    public final static int COMPLETE_GET_DATA = 100;
 
-
-    private TextView textViewCity,textViewStatus,textViewTemp,textViewDay;
+    public TextView textViewCity,textViewStatus,textViewTemp,textViewDay;
     private ImageView imgIcon;
     private Button btnMenu;
     public int position;
-    private WeatherResponse weatherResponse;
+    public WeatherResponse weatherResponse;
+
+    private GetDataUrlHandler mHanler;
 
     @RequiresApi(api = Build.VERSION_CODES.KITKAT)
     @Override
@@ -44,10 +46,41 @@ public class WeatherDisplay extends AppCompatActivity {
         mapping();
         position = MainActivity.sharedPreferences.getInt("position",-1);
         textViewCity.setText(MainActivity.sharedPreferences.getString("city",""));
-        new GetWeatherData().execute("https://api.openweathermap.org/data/2.5/weather?id="+MainActivity.arrCity.get(position).getId()+"&appid=044c41605d89bfffcc59a2a62e878c60");
+        mHanler = new GetDataUrlHandler(new WeakReference<>(this));
+        getDataFromUrl();
     }
 
-
+    private void getDataFromUrl() {
+        Thread thread = new Thread(new Runnable() {
+            @Override
+            public void run() {
+                URL urlJSON ;
+                String result;
+                HttpURLConnection urlConnection;
+                try {
+                    urlJSON = new URL("https://api.openweathermap.org/data/2.5/weather?id="+ MainActivity.arrCity.get(position).getId()+"&appid=044c41605d89bfffcc59a2a62e878c60");
+                    urlConnection = (HttpURLConnection) urlJSON.openConnection();
+                    urlConnection.setRequestMethod("GET");
+                    urlConnection.connect();
+                    BufferedReader inputStream = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
+                    urlConnection.disconnect();
+                    result = inputStream.readLine();
+                    Gson gson = new Gson();
+                    weatherResponse = gson.fromJson(result,WeatherResponse.class);
+                    if(weatherResponse.getWeather() != null){
+                        Message message = new Message();
+                        message.what = COMPLETE_GET_DATA;
+                        mHanler.sendMessage(message);
+                    }
+                } catch (MalformedURLException e) {
+                    e.printStackTrace();
+                } catch (IOException e) {
+                    e.printStackTrace();
+                }
+            }
+        });
+        thread.start();
+    }
 
     @Override
     protected void onResume() {
@@ -77,7 +110,14 @@ public class WeatherDisplay extends AppCompatActivity {
         imgIcon = findViewById(R.id.imgView_Display_icon);
     }
 
-    class GetWeatherData extends AsyncTask<String,Void,Bitmap>{
+    public static class GetWeatherData extends AsyncTask<String,Void,Bitmap>{
+
+        private WeakReference<WeatherDisplay> mWeakActivity;
+
+        public GetWeatherData(WeakReference<WeatherDisplay> mWeakActivity) {
+            this.mWeakActivity = mWeakActivity;
+        }
+
         @Override
         protected void onPreExecute() {
             super.onPreExecute();
@@ -85,19 +125,9 @@ public class WeatherDisplay extends AppCompatActivity {
 
         @Override
         protected Bitmap doInBackground(String... url) {
-            String result;
             Bitmap bmp = null;
             try {
-                URL urlJSON = new URL(url[0]);
-                HttpURLConnection urlConnection = (HttpURLConnection) urlJSON.openConnection();
-                urlConnection.setRequestMethod("GET");
-                urlConnection.connect();
-                BufferedReader inputStream = new BufferedReader(new InputStreamReader(urlConnection.getInputStream()));
-                urlConnection.disconnect();
-                result = inputStream.readLine();
-                Gson gson = new Gson();
-                weatherResponse = gson.fromJson(result,WeatherResponse.class);
-                String img = "https://openweathermap.org/img/wn/"+weatherResponse.getWeather().get(0).getIcon()+"@2x.png";
+                String img = "https://openweathermap.org/img/wn/"+url[0]+"@2x.png";
                 URL url1 = new URL(img);
                 InputStream in = url1.openStream();
                 bmp = BitmapFactory.decodeStream(in);
@@ -112,17 +142,9 @@ public class WeatherDisplay extends AppCompatActivity {
         @Override
         protected void onPostExecute(Bitmap result) {
             super.onPostExecute(result);
-            imgIcon.setImageBitmap(result);
-            if(weatherResponse!=null){
-                textViewStatus.setText(weatherResponse.getWeather().get(0).getMain());
-                double tempConvert = Double.parseDouble(weatherResponse.getMain().getTemp());
-                tempConvert = tempConvert - 273.15;
-                String day = weatherResponse.getDt();
-                long longDay = Long.parseLong(day) * 1000;
-                Date date = new Date(longDay);
-                textViewDay.setText(SimpleDateFormat.getTimeInstance().format(date));
-                textViewTemp.setText(String.valueOf(tempConvert));
-            }
+            WeatherDisplay weatherDisplay = mWeakActivity.get();
+            if(weatherDisplay != null)
+                weatherDisplay.imgIcon.setImageBitmap(result);
         }
     }
 }
