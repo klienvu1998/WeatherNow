@@ -28,14 +28,15 @@ import java.net.URL;
 
 
 public class WeatherDisplay extends AppCompatActivity {
+
     public final static int COMPLETE_GET_DATA = 100;
 
     public TextView textViewCity,textViewStatus,textViewTemp,textViewDay;
     private ImageView imgIcon;
     private Button btnMenu;
-    public int position;
+    public String id;
     public WeatherResponse weatherResponse;
-
+    public SharedPreferences sharedPreferences;
     private GetDataUrlHandler mHanler;
 
     @RequiresApi(api = Build.VERSION_CODES.KITKAT)
@@ -44,9 +45,10 @@ public class WeatherDisplay extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_weather_display);
         mapping();
-        position = MainActivity.sharedPreferences.getInt("position",-1);
-        textViewCity.setText(MainActivity.sharedPreferences.getString("city",""));
-        mHanler = new GetDataUrlHandler(new WeakReference<>(this));
+        sharedPreferences = getSharedPreferences("data",MODE_PRIVATE);
+        id = sharedPreferences.getString("id","");
+        textViewCity.setText(sharedPreferences.getString("city",""));
+        mHanler = new GetDataUrlHandler(this);
         getDataFromUrl();
     }
 
@@ -58,7 +60,7 @@ public class WeatherDisplay extends AppCompatActivity {
                 String result;
                 HttpURLConnection urlConnection;
                 try {
-                    urlJSON = new URL("https://api.openweathermap.org/data/2.5/weather?id="+ MainActivity.arrCity.get(position).getId()+"&appid=044c41605d89bfffcc59a2a62e878c60");
+                    urlJSON = new URL("https://api.openweathermap.org/data/2.5/weather?id="+ id+"&appid=044c41605d89bfffcc59a2a62e878c60");
                     urlConnection = (HttpURLConnection) urlJSON.openConnection();
                     urlConnection.setRequestMethod("GET");
                     urlConnection.connect();
@@ -92,8 +94,8 @@ public class WeatherDisplay extends AppCompatActivity {
         btnMenu.setOnClickListener(new View.OnClickListener() {
             @Override
             public void onClick(View v) {
-                SharedPreferences.Editor editor = MainActivity.sharedPreferences.edit();
-                editor.putString("screen","0");
+                SharedPreferences.Editor editor = sharedPreferences.edit();
+                editor.putString("id","");
                 editor.apply();
                 Intent intent = new Intent(WeatherDisplay.this,MainActivity.class);
                 startActivity(intent);
@@ -111,11 +113,10 @@ public class WeatherDisplay extends AppCompatActivity {
     }
 
     public static class GetWeatherData extends AsyncTask<String,Void,Bitmap>{
-
         private WeakReference<WeatherDisplay> mWeakActivity;
 
-        public GetWeatherData(WeakReference<WeatherDisplay> mWeakActivity) {
-            this.mWeakActivity = mWeakActivity;
+        public GetWeatherData(WeatherDisplay mWeakActivity) {
+            this.mWeakActivity = new WeakReference<>(mWeakActivity);
         }
 
         @Override
@@ -129,8 +130,10 @@ public class WeatherDisplay extends AppCompatActivity {
             try {
                 String img = "https://openweathermap.org/img/wn/"+url[0]+"@2x.png";
                 URL url1 = new URL(img);
-                InputStream in = url1.openStream();
-                bmp = BitmapFactory.decodeStream(in);
+                if(mWeakActivity.get() !=null){
+                    InputStream in = url1.openStream();
+                    bmp = BitmapFactory.decodeStream(in);
+                }
             } catch (MalformedURLException e) {
                 e.printStackTrace();
             } catch (IOException e) {
@@ -142,9 +145,8 @@ public class WeatherDisplay extends AppCompatActivity {
         @Override
         protected void onPostExecute(Bitmap result) {
             super.onPostExecute(result);
-            WeatherDisplay weatherDisplay = mWeakActivity.get();
-            if(weatherDisplay != null)
-                weatherDisplay.imgIcon.setImageBitmap(result);
+            if(mWeakActivity.get() != null)
+                mWeakActivity.get().imgIcon.setImageBitmap(result);
         }
     }
 }
